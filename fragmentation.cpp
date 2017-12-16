@@ -3,17 +3,13 @@
 
 
 using namespace std;
-/// вектор, содержащий box-ы, являющиеся частью рабочего пространства
-vector<Box> solution;
-/// вектор, содержащий box-ы, не являющиеся частью рабочего пространства
-vector<Box> not_solution;
-/// вектор, содержащий box-ы, находящиеся на границе между "рабочим" и "нерабочим" пространством
-vector<Box> boundary;
-/// вектор, хранящий box-ы, анализируемые на следующей итерации алгоритма
-vector<Box> temporary_boxes;
+cilk::reducer<cilk::op_vector<Box>>solution; 
+cilk::reducer<cilk::op_vector<Box>>not_solution;
+cilk::reducer<cilk::op_vector<Box>>boundary;
+cilk::reducer<cilk::op_vector<Box>>temporary_boxes;
 
 using namespace std;
-/// функции gj()
+/// ГґГіГ­ГЄГ¶ГЁГЁ gj()
 
 //------------------------------------------------------------------------------------------
 double g1(double x1, double x2)
@@ -83,7 +79,7 @@ unsigned int low_level_fragmentation::FindTreeDepth()
 	else
 	{
 		boxes_pair new_boxes;
-		// допустим, разобьем начальную область по ширине
+		// Г¤Г®ГЇГіГ±ГІГЁГ¬, Г°Г Г§Г®ГЎГјГҐГ¬ Г­Г Г·Г Г«ГјГ­ГіГѕ Г®ГЎГ«Г Г±ГІГј ГЇГ® ГёГЁГ°ГЁГ­ГҐ
 		VerticalSplitter(current_box, new_boxes);
 		unsigned int tree_depth = 1;
 		box_diagonal = new_boxes.first.GetDiagonal();
@@ -139,19 +135,19 @@ void low_level_fragmentation::GetBoxType(const Box& box)
 	type = ClasifyBox(vecs);
 
 	if (type == 0) 
-		not_solution.push_back(box);
+		not_solution->push_back(box);
 
 	if (type == 1) 
-		solution.push_back(box);
+		solution->push_back(box);
 
 	if (type == 2) { 
 		GetNewBoxes(box, pair);
-		temporary_boxes.push_back(pair.first);
-		temporary_boxes.push_back(pair.second);
+		temporary_boxes->push_back(pair.first);
+		temporary_boxes->push_back(pair.second);
 	}
 
 	if (type == 3) 
-		boundary.push_back(box);
+		boundary->push_back(box);
 }
 //------------------------------------------------------------------------------------------
 high_level_analysis::high_level_analysis(double& min_x, double& min_y, double& x_width, double& y_height) :
@@ -187,43 +183,43 @@ void high_level_analysis::GetMinMax(const Box& box, min_max_vectors& min_max_vec
 	}
 
 	// MIN
-	// функция g1(x1,x2)
+	// ГґГіГ­ГЄГ¶ГЁГї g1(x1,x2)
 	a1min = __min(abs(xmin), abs(xmax));
 	a2min = __min(abs(ymin), abs(ymax));
 	g_min.push_back(g1(a1min, a2min));
 
-	// функция g2(x1,x2)
+	// ГґГіГ­ГЄГ¶ГЁГї g2(x1,x2)
 	a1min = __max(abs(xmin), abs(xmax));
 	a2min = __max(abs(ymin), abs(ymax));
 	g_min.push_back(g2(a1min, a2min));
 
-	// функция g3(x1,x2)
+	// ГґГіГ­ГЄГ¶ГЁГї g3(x1,x2)
 	a1min = __min(abs(xmin - g_l0), abs(xmax - g_l0));
 	a2min = __min(abs(ymin), abs(ymax));
 	g_min.push_back(g3(a1min, a2min));
 
-	// функция g4(x1,x2)
+	// ГґГіГ­ГЄГ¶ГЁГї g4(x1,x2)
 	a1min = __max(abs(xmin - g_l0), abs(xmax - g_l0));
 	a2min = __max(abs(ymin), abs(ymax));
 	g_min.push_back(g4(a1min, a2min));
 
 	// MAX
-	// функция g1(x1,x2)
+	// ГґГіГ­ГЄГ¶ГЁГї g1(x1,x2)
 	a1max = __max(abs(xmin), abs(xmax));
 	a2max = __max(abs(ymin), abs(ymax));
 	g_max.push_back(g1(a1max, a2max));
 
-	// функция g2(x1,x2)
+	// ГґГіГ­ГЄГ¶ГЁГї g2(x1,x2)
 	a1max = __min(abs(xmin), abs(xmax));
 	a2max = __min(abs(ymin), abs(ymax));
 	g_max.push_back(g2(a1max, a2max));
 
-	// функция g3(x1,x2)
+	// ГґГіГ­ГЄГ¶ГЁГї g3(x1,x2)
 	a1max = __max(abs(xmin - g_l0), abs(xmax - g_l0));
 	a2max = __max(abs(ymin), abs(ymax));
 	g_max.push_back(g3(a1max, a2max));
 
-	// функция g4(x1,x2)
+	// ГґГіГ­ГЄГ¶ГЁГї g4(x1,x2)
 	a1max = __min(abs(xmin - g_l0), abs(xmax - g_l0));
 	a2max = __min(abs(ymin), abs(ymax));
 	g_max.push_back(g4(a1max, a2max));
@@ -234,15 +230,20 @@ void high_level_analysis::GetMinMax(const Box& box, min_max_vectors& min_max_vec
 //------------------------------------------------------------------------------------------
 void high_level_analysis::GetSolution()
 {
-	int length = FindTreeDepth() + 1;
+	int length = FindTreeDepth()+1;	
 	boxes_pair pair;
-	temporary_boxes.push_back(current_box);
+	temporary_boxes->push_back(current_box);
 
 	for (int i = 0; i < length; i++) {
-		int number_of_box_on_level = temporary_boxes.size();
-		vector<Box> curr_boxes(temporary_boxes);
-		temporary_boxes.clear();
-		for (int j = 0; j < number_of_box_on_level; j++) {
+		std::vector<Box> temp;
+		temporary_boxes.move_out(temp);
+		int number_of_box_on_level = temp.size();
+		//cilk::reducer<cilk::op_vector<Box>>curr_boxes;
+		//curr_boxes.move_in(temp);
+		std::vector<Box> curr_boxes(temp);
+		temp.clear();
+		temporary_boxes.set_value(temp);
+		cilk_for (int j = 0; j < number_of_box_on_level; j++){ // Р’Р’Р•РЎРўР РЎР®Р”Рђ РџРђР РђР›Р›Р•Р›РР—Рњ
 			GetBoxType(curr_boxes[j]);
 		}
 	}
@@ -251,24 +252,30 @@ void high_level_analysis::GetSolution()
 void WriteResults(const char* file_names[])
 {
 	double _xmin, _xmax, _w, _h;
-	ofstream myFile(file_names[0]);
-	for (int i = 0; i < solution.size(); i++) {
-		solution[i].GetParameters(_xmin, _xmax, _w, _h);
-		myFile << _xmin << " " << _xmax << " " << _w << " " << _h << endl;
+	std::ofstream myfile(file_names[0]);
+	std::vector<Box>sol_tmp;
+	solution.move_out(sol_tmp);
+	for (int i = 0; i < sol_tmp.size(); i++){
+		sol_tmp[i].GetParameters(_xmin, _xmax, _w, _h);
+		myfile << _xmin << " " << _xmax << " " << _w << " " << _h << std::endl;
 	}
-	myFile.close();
+	myfile.close();
 
-	ofstream myFile1(file_names[1]);
-	for (int i = 0; i < not_solution.size(); i++) {
-		not_solution[i].GetParameters(_xmin, _xmax, _w, _h);
-		myFile1 << _xmin << " " << _xmax << " " << _w << " " << _h << endl;
+	std::vector<Box>nsol_tmp;
+	not_solution.move_out(nsol_tmp);
+	std::ofstream myfile1(file_names[1]);
+	for (int i = 0; i < nsol_tmp.size(); i++){
+		nsol_tmp[i].GetParameters(_xmin, _xmax, _w, _h);
+		myfile1 << _xmin << " " << _xmax << " " << _w << " " << _h << std::endl;
 	}
-	myFile1.close();
+	myfile1.close();
 
-	ofstream myFile2(file_names[2]);
-	for (int i = 0; i < boundary.size(); i++) {
-		boundary[i].GetParameters(_xmin, _xmax, _w, _h);
-		myFile2 << _xmin << " " << _xmax << " " << _w << " " << _h << endl;
+	std::vector<Box>bnd_tmp;
+	boundary.move_out(bnd_tmp);
+	std::ofstream myfile2(file_names[2]);
+	for (int i = 0; i < bnd_tmp.size(); i++){
+		bnd_tmp[i].GetParameters(_xmin, _xmax, _w, _h);
+		myfile2 << _xmin << " " << _xmax << " " << _w << " " << _h << std::endl;
 	}
-	myFile2.close();
+	myfile2.close();
 }
