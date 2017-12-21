@@ -74,7 +74,7 @@ unsigned int low_level_fragmentation::FindTreeDepth()
 	double box_diagonal = current_box.GetDiagonal();
 	if (box_diagonal <= g_precision)
 	{
-		return 0;
+ 		return 0;
 	}
 	else
 	{
@@ -113,7 +113,7 @@ int low_level_fragmentation::ClasifyBox(const min_max_vectors& vects)
 	int fL = vects.first.size();
 	int sL = vects.second.size();
 
-	if (vects.first[0] == 0) return 3; 
+	if (vects.first[0] == 0  && vects.second[0] == 0) return 3; 
 
 	for (int i = 0; i < 4; i++)
 	{
